@@ -1,20 +1,15 @@
+import TextbookLinkCard from '@/components/TextbookLinkCard';
+
 type RoadmapStep = {
   type?: 'study' | 'exam';
   period: string;
   material?: string;
+  textbook?: string;
   point?: string;
   result?: string;
   score?: string;
   status?: 'not_started' | 'in_progress' | 'completed';
 };
-
-function extractYouTubeId(url: string): string | null {
-  if (!url) return null;
-  const regExp =
-    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-  const match = url.match(regExp);
-  return match && match[1] ? match[1] : null;
-}
 
 export default function RoadmapTimeline({
   steps,
@@ -37,7 +32,7 @@ export default function RoadmapTimeline({
     <ol className="relative space-y-6 before:absolute before:top-4 before:bottom-8 before:left-4 before:w-0.5 before:bg-blue-200 before:content-['']">
       {steps.map((step, idx) => {
         const isExam = step.type === 'exam';
-        const youtubeId = step.material ? extractYouTubeId(step.material) : null;
+        const material = step.material || step.textbook;
 
         return (
           <li key={idx} className="relative pl-12">
@@ -55,39 +50,7 @@ export default function RoadmapTimeline({
                   ⏱️ 期間: {step.period || '未設定'}
                 </div>
 
-                {step.material && (
-                  <div>
-                    <span className="mb-1 block text-xs font-bold text-gray-500">📚 使用した教材・動画</span>
-                    {youtubeId ? (
-                      <div className="mt-1 space-y-2">
-                        <p className="break-all rounded border bg-white p-2 text-xs text-gray-500">
-                          🔗{' '}
-                          <a
-                            href={step.material}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
-                            {step.material}
-                          </a>
-                        </p>
-                        <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-black shadow-sm">
-                          <iframe
-                            src={`https://www.youtube.com/embed/${youtubeId}`}
-                            title="YouTube video player"
-                            className="absolute top-0 left-0 h-full w-full border-0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap rounded-md border bg-white p-2.5 text-sm font-medium text-gray-800">
-                        {step.material}
-                      </p>
-                    )}
-                  </div>
-                )}
+                {material && <TextbookLinkCard material={material} />}
 
                 {step.point && (
                   <div>

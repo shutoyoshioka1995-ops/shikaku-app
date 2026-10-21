@@ -6,11 +6,14 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import UserAvatar from '@/components/UserAvatar';
 import RoadmapTimeline from '@/components/RoadmapTimeline';
+import LikeButton from '@/components/LikeButton';
+import { incrementExperienceLike } from '@/lib/incrementLike';
 
 type RoadmapStep = {
   type?: 'study' | 'exam';
   period: string;
   material?: string;
+  textbook?: string;
   point?: string;
   result?: string;
   score?: string;
@@ -194,22 +197,19 @@ export default function ExperienceDetailPage() {
     if (!experience || hasLiked || isLiking) return;
 
     setIsLiking(true);
-    const newLikes = likes + 1;
-
-    setLikes(newLikes);
+    const previousLikes = likes;
+    setLikes(previousLikes + 1);
     setHasLiked(true);
 
-    const { error } = await supabase
-      .from('experiences')
-      .update({ likes_count: newLikes })
-      .eq('id', experience.id);
-
-    if (error) {
-      setLikes(likes);
+    try {
+      const next = await incrementExperienceLike(experience.id, previousLikes);
+      setLikes(next);
+    } catch (err) {
+      setLikes(previousLikes);
       setHasLiked(false);
+    } finally {
+      setIsLiking(false);
     }
-
-    setIsLiking(false);
   };
 
   const handleDelete = async () => {
@@ -331,21 +331,13 @@ export default function ExperienceDetailPage() {
               </span>
             )}
             
-            <button
-              onClick={handleLike}
-              disabled={hasLiked || isLiking}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition shadow-sm border ${
-                hasLiked
-                  ? 'bg-pink-50 text-pink-600 border-pink-300 cursor-default'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:scale-95'
-              }`}
-            >
-              <span>{hasLiked ? '❤️' : '👍'}</span>
-              <span>{hasLiked ? '参考になった！' : '参考になった'}</span>
-              <span className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded-full text-[11px] ml-0.5">
-                {likes}
-              </span>
-            </button>
+            <LikeButton
+              variant="header"
+              count={likes}
+              liked={hasLiked}
+              loading={isLiking}
+              onLike={handleLike}
+            />
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-snug">
@@ -418,21 +410,13 @@ export default function ExperienceDetailPage() {
 
         <div className="bg-white border rounded-xl p-6 text-center shadow-sm space-y-3">
           <p className="text-sm font-bold text-gray-700">このロードマップは役に立ちましたか？</p>
-          <button
-            onClick={handleLike}
-            disabled={hasLiked || isLiking}
-            className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-extrabold transition shadow-md ${
-              hasLiked
-                ? 'bg-pink-100 text-pink-700 cursor-default'
-                : 'bg-pink-500 text-white hover:bg-pink-600 active:scale-95'
-            }`}
-          >
-            <span>{hasLiked ? '❤️' : '👍'}</span>
-            <span>{hasLiked ? '「参考になった！」を送信しました' : '参考になった！'}</span>
-            <span className="bg-white/30 text-white px-2 py-0.5 rounded-full text-xs">
-              {likes}
-            </span>
-          </button>
+          <LikeButton
+            variant="cta"
+            count={likes}
+            liked={hasLiked}
+            loading={isLiking}
+            onLike={handleLike}
+          />
         </div>
       </div>
     </main>

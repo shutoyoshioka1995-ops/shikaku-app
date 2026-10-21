@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import LikeButton from '@/components/LikeButton';
+import { incrementExperienceLike } from '@/lib/incrementLike';
 
 type Experience = {
   id: string;
@@ -40,6 +42,9 @@ export default function QualificationDetailPage() {
   const [selectedAttempts, setSelectedAttempts] = useState('すべて');
   const [selectedStatus, setSelectedStatus] = useState('すべて');
   const [selectedAge, setSelectedAge] = useState('すべて');
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [likingId, setLikingId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -117,6 +122,31 @@ export default function QualificationDetailPage() {
 
     return true;
   });
+
+  const likeCountOf = (exp: Experience) => likeCounts[exp.id] ?? exp.likes_count ?? 0;
+
+  const handleLike = async (exp: Experience) => {
+    if (likedIds.has(exp.id) || likingId) return;
+
+    const previous = likeCountOf(exp);
+    setLikingId(exp.id);
+    setLikeCounts((prev) => ({ ...prev, [exp.id]: previous + 1 }));
+    setLikedIds((prev) => new Set(prev).add(exp.id));
+
+    try {
+      const next = await incrementExperienceLike(exp.id, previous);
+      setLikeCounts((prev) => ({ ...prev, [exp.id]: next }));
+    } catch (err) {
+      setLikeCounts((prev) => ({ ...prev, [exp.id]: previous }));
+      setLikedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(exp.id);
+        return next;
+      });
+    } finally {
+      setLikingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -258,9 +288,12 @@ export default function QualificationDetailPage() {
                       {exp.title || '無題のロードマップ'}
                     </h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs bg-pink-50 text-pink-700 font-bold px-2.5 py-1 rounded-full border border-pink-200">
-                        👍 {exp.likes_count || 0}
-                      </span>
+                      <LikeButton
+                        count={likeCountOf(exp)}
+                        liked={likedIds.has(exp.id)}
+                        loading={likingId === exp.id}
+                        onLike={() => handleLike(exp)}
+                      />
                       {exp.passed_date && (
                         <span className="text-xs bg-green-100 text-green-800 font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
                           {exp.passed_date} 合格

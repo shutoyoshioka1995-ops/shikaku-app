@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import UserAvatar from '@/components/UserAvatar';
+import LikeButton from '@/components/LikeButton';
+import { incrementExperienceLike } from '@/lib/incrementLike';
 
 export type HomeExperience = {
   id: string;
@@ -12,6 +14,7 @@ export type HomeExperience = {
   avatar_url?: string | null;
   qualification_name?: string;
   likes_count?: number;
+  created_at?: string;
   daily_study_hours?: string;
   duration_days?: string;
   industry?: string;
@@ -23,6 +26,7 @@ export type HomeExperience = {
   roadmap?: Array<{
     period?: string;
     material?: string;
+    textbook?: string;
     point?: string;
   }>;
 };
@@ -46,7 +50,7 @@ type FilterId = (typeof ALL_FILTERS)[number]['id'];
 function experienceText(exp: HomeExperience) {
   const roadmapText = Array.isArray(exp.roadmap)
     ? exp.roadmap
-        .map((step) => [step.period, step.material, step.point].filter(Boolean).join(' '))
+        .map((step) => [step.period, step.material, step.textbook, step.point].filter(Boolean).join(' '))
         .join(' ')
     : '';
 
@@ -103,9 +107,17 @@ function matchesFilters(exp: HomeExperience, selected: FilterId[]) {
 function ExperienceCard({
   exp,
   variant,
+  likeCount,
+  liked,
+  liking,
+  onLike,
 }: {
   exp: HomeExperience;
   variant: 'popular' | 'recent';
+  likeCount: number;
+  liked: boolean;
+  liking: boolean;
+  onLike: () => void;
 }) {
   const displayName = exp.user_name || '匿名';
 
@@ -119,9 +131,7 @@ function ExperienceCard({
           <span className="truncate rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-blue-800">
             {exp.qualification_name}
           </span>
-          <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-xs font-bold text-pink-700">
-            👍 {exp.likes_count || 0}
-          </span>
+          <LikeButton count={likeCount} liked={liked} loading={liking} onLike={onLike} />
         </div>
         <h3 className="line-clamp-2 text-sm font-bold text-gray-900">
           {exp.title || '無題のロードマップ'}
@@ -153,7 +163,7 @@ function ExperienceCard({
         <span className="rounded bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
           {exp.qualification_name}
         </span>
-        <span className="text-xs font-bold text-pink-600">👍 {exp.likes_count || 0}</span>
+        <LikeButton count={likeCount} liked={liked} loading={liking} onLike={onLike} />
       </div>
       <h3 className="text-sm font-bold text-gray-900">{exp.title || '無題のロードマップ'}</h3>
       <p className="flex items-center gap-2 text-xs text-gray-500">
@@ -171,9 +181,38 @@ function ExperienceCard({
 
 export default function HomeExperiences({ experiences }: { experiences: HomeExperience[] }) {
   const [selected, setSelected] = useState<FilterId[]>([]);
+  const [sort, setSort] = useState<'popular' | 'latest'>('popular');
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [likingId, setLikingId] = useState<string | null>(null);
 
   const toggleFilter = (id: FilterId) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const likeCountOf = (exp: HomeExperience) => likeCounts[exp.id] ?? exp.likes_count ?? 0;
+
+  const handleLike = async (exp: HomeExperience) => {
+    if (likedIds.has(exp.id) || likingId) return;
+
+    const previous = likeCountOf(exp);
+    setLikingId(exp.id);
+    setLikeCounts((prev) => ({ ...prev, [exp.id]: previous + 1 }));
+    setLikedIds((prev) => new Set(prev).add(exp.id));
+
+    try {
+      const next = await incrementExperienceLike(exp.id, previous);
+      setLikeCounts((prev) => ({ ...prev, [exp.id]: next }));
+    } catch (err) {
+      setLikeCounts((prev) => ({ ...prev, [exp.id]: previous }));
+      setLikedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(exp.id);
+        return next;
+      });
+    } finally {
+      setLikingId(null);
+    }
   };
 
   const filtered = useMemo(
@@ -181,8 +220,11 @@ export default function HomeExperiences({ experiences }: { experiences: HomeExpe
     [experiences, selected]
   );
 
-  const popularExperiences = [...filtered]
-    .sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0))
+  const featuredExperiences = [...filtered]
+    .sort((a, b) => {
+      if (sort === 'popular') return likeCountOf(b) - likeCountOf(a);
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    })
     .slice(0, 3);
 
   const recentExperiences = filtered.slice(0, 5);
@@ -227,11 +269,45 @@ export default function HomeExperiences({ experiences }: { experiences: HomeExpe
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-bold text-gray-800 sm:text-xl">🔥 人気の合格ロードマップ</h2>
-        {popularExperiences.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-gray-800 sm:text-xl">🔥 人気の合格ロードマップ</h2>
+          <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => setSort('popular')}
+              className={`rounded-md px-3 py-1.5 text-xs font-bold transition sm:text-sm ${
+                sort === 'popular'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              🔥 人気順
+            </button>
+            <button
+              type="button"
+              onClick={() => setSort('latest')}
+              className={`rounded-md px-3 py-1.5 text-xs font-bold transition sm:text-sm ${
+                sort === 'latest'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              🆕 最新順
+            </button>
+          </div>
+        </div>
+        {featuredExperiences.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {popularExperiences.map((exp) => (
-              <ExperienceCard key={exp.id} exp={exp} variant="popular" />
+            {featuredExperiences.map((exp) => (
+              <ExperienceCard
+                key={exp.id}
+                exp={exp}
+                variant="popular"
+                likeCount={likeCountOf(exp)}
+                liked={likedIds.has(exp.id)}
+                liking={likingId === exp.id}
+                onLike={() => handleLike(exp)}
+              />
             ))}
           </div>
         ) : (
@@ -248,7 +324,15 @@ export default function HomeExperiences({ experiences }: { experiences: HomeExpe
           <h2 className="text-lg font-bold text-gray-800 sm:text-xl">🆕 最新の投稿ロードマップ</h2>
           <div className="space-y-3">
             {recentExperiences.map((exp) => (
-              <ExperienceCard key={exp.id} exp={exp} variant="recent" />
+              <ExperienceCard
+                key={exp.id}
+                exp={exp}
+                variant="recent"
+                likeCount={likeCountOf(exp)}
+                liked={likedIds.has(exp.id)}
+                liking={likingId === exp.id}
+                onLike={() => handleLike(exp)}
+              />
             ))}
           </div>
         </section>
