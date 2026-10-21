@@ -14,6 +14,7 @@ type RoadmapStep = {
   period: string;
   material?: string;
   textbook?: string;
+  textbook_url?: string;
   point?: string;
   result?: string;
   score?: string;

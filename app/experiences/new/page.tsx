@@ -9,6 +9,8 @@ type RoadmapStep = {
   type?: 'study' | 'exam';
   period: string;
   material?: string;
+  textbook?: string;
+  textbook_url?: string;
   point?: string;
   result?: string;
   score?: string;
@@ -18,6 +20,13 @@ type Qualification = {
   id: string;
   name: string;
 };
+
+function normalizeTextbookUrl(url?: string) {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
 
 function extractYouTubeId(url: string): string | null {
   if (!url) return null;
@@ -75,7 +84,7 @@ function NewExperienceForm() {
   const [title, setTitle] = useState('');
 
   const [roadmapSteps, setRoadmapSteps] = useState<RoadmapStep[]>([
-    { type: 'study', period: '0〜14日目（初期）', material: '', point: '' },
+    { type: 'study', period: '0〜14日目（初期）', material: '', textbook_url: '', point: '' },
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -153,7 +162,10 @@ function NewExperienceForm() {
   };
 
   const addStudyStep = () => {
-    setRoadmapSteps([...roadmapSteps, { type: 'study', period: '', material: '', point: '' }]);
+    setRoadmapSteps([
+      ...roadmapSteps,
+      { type: 'study', period: '', material: '', textbook_url: '', point: '' },
+    ]);
   };
 
   const addExamStep = () => {
@@ -199,7 +211,11 @@ function NewExperienceForm() {
         daily_study_hours: dailyStudyHours,
         duration_days: durationDays,
         title: title,
-        roadmap: roadmapSteps,
+        roadmap: roadmapSteps.map((step) => ({
+          ...step,
+          textbook: step.textbook || step.material || '',
+          textbook_url: normalizeTextbookUrl(step.textbook_url),
+        })),
       },
     ]);
 
@@ -515,6 +531,23 @@ function NewExperienceForm() {
                             </div>
                           </div>
                         )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          教材の購入・参照URL（任意）
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="url"
+                          placeholder="例: https://www.amazon.co.jp/... （アフィリエイトリンク可）"
+                          value={step.textbook_url || ''}
+                          onChange={(e) => handleStepChange(index, 'textbook_url', e.target.value)}
+                          className="w-full border p-2 rounded-md text-sm bg-white"
+                        />
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          入力すると詳細ページに「教材の購入・詳細ページへ」ボタンが表示されます。空欄の場合は教材名からAmazon検索リンクを自動生成します。
+                        </p>
                       </div>
 
                       <div>

@@ -5,6 +5,7 @@ type RoadmapStep = {
   period: string;
   material?: string;
   textbook?: string;
+  textbook_url?: string;
   point?: string;
   result?: string;
   score?: string;
@@ -50,7 +51,13 @@ export default function RoadmapTimeline({
                   ⏱️ 期間: {step.period || '未設定'}
                 </div>
 
-                {material && <TextbookLinkCard material={material} />}
+                {(material || step.textbook_url) && (
+                  <TextbookLinkCard
+                    material={step.material}
+                    textbook={step.textbook}
+                    textbookUrl={step.textbook_url}
+                  />
+                )}
 
                 {step.point && (
                   <div>
