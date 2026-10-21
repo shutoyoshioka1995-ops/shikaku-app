@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import UserAvatar from '@/components/UserAvatar';
+import RoadmapTimeline from '@/components/RoadmapTimeline';
 
 type RoadmapStep = {
   type?: 'study' | 'exam';
@@ -34,17 +36,10 @@ type ExperienceDetail = {
   created_at?: string;
 };
 
-function extractYouTubeId(url: string): string | null {
-  if (!url) return null;
-  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-  const match = url.match(regExp);
-  return match && match[1] ? match[1] : null;
-}
-
 export default function ExperienceDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const expId = params?.expId as string;
+  const expId = (params?.expId || params?.id) as string;
 
   const [experience, setExperience] = useState<ExperienceDetail | null>(null);
   const [qualificationName, setQualificationName] = useState<string>('');
@@ -356,8 +351,13 @@ export default function ExperienceDetailPage() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-snug">
             {experience.title || '無題のロードマップ'}
           </h1>
-          <p className="text-xs text-gray-400">
-            投稿者: {experience.user_name || '匿名'}
+          <p className="flex items-center gap-2 text-xs text-gray-400">
+            <UserAvatar
+              seed={experience.user_id || experience.user_name || experience.id}
+              alt={experience.user_name || '匿名'}
+              size={28}
+            />
+            <span>投稿者: {experience.user_name || '匿名'}</span>
           </p>
         </div>
 
@@ -408,128 +408,12 @@ export default function ExperienceDetailPage() {
             🗺️ 合格までの学習ロードマップ & 受験履歴
           </h2>
 
-          {Array.isArray(experience.roadmap) && experience.roadmap.length > 0 ? (
-            <div className="relative border-l-2 border-blue-500 ml-3 pl-6 space-y-8">
-              {experience.roadmap.map((step, idx) => {
-                const isExam = step.type === 'exam';
-                const youtubeId = step.material ? extractYouTubeId(step.material) : null;
-
-                return (
-                  <div key={idx} className="relative group">
-                    <div
-                      className={`absolute -left-[35px] top-0 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ring-4 ring-white ${
-                        isExam ? 'bg-amber-600' : 'bg-blue-600'
-                      }`}
-                    >
-                      {isExam ? '📝' : idx + 1}
-                    </div>
-
-                    {!isExam && (
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3 shadow-sm">
-                        <div className="font-bold text-blue-700 text-sm bg-blue-50 px-2.5 py-1 rounded inline-block">
-                          ⏱️ 期間: {step.period || '未設定'}
-                        </div>
-
-                        {step.material && (
-                          <div>
-                            <span className="block text-xs font-bold text-gray-500 mb-1">📚 使用した教材・動画</span>
-                            {youtubeId ? (
-                              <div className="space-y-2 mt-1">
-                                <p className="text-xs text-gray-500 break-all bg-white p-2 border rounded">
-                                  🔗 <a href={step.material} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{step.material}</a>
-                                </p>
-                                <div className="relative w-full aspect-video rounded-lg overflow-hidden border shadow-sm bg-black">
-                                  <iframe
-                                    src={`https://www.youtube.com/embed/${youtubeId}`}
-                                    title="YouTube video player"
-                                    className="absolute top-0 left-0 w-full h-full border-0"
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                    allowFullScreen
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-800 font-medium bg-white p-2.5 border rounded-md whitespace-pre-wrap">
-                                {step.material}
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {step.point && (
-                          <div>
-                            <span className="block text-xs font-bold text-gray-500 mb-1">💡 学習のポイント・工夫</span>
-                            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed bg-white p-2.5 border rounded-md">
-                              {step.point}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {isExam && (
-                      <div className="bg-amber-50/80 border-2 border-amber-300 rounded-lg p-4 space-y-3 shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-2">
-                          <span className="font-extrabold text-amber-900 text-sm">
-                            📝 本番受験: {step.period || '時期未設定'}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {step.score && (
-                              <span className="text-xs bg-white text-amber-900 font-bold px-2 py-0.5 rounded border border-amber-200">
-                                得点: {step.score}
-                              </span>
-                            )}
-                            <span
-                              className={`text-xs font-extrabold px-2.5 py-0.5 rounded-full ${
-                                step.result === '合格'
-                                  ? 'bg-green-600 text-white'
-                                  : 'bg-red-500 text-white'
-                              }`}
-                            >
-                              {step.result || '結果未設定'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {step.point && (
-                          <div>
-                            <span className="block text-xs font-bold text-amber-800 mb-1">
-                              🔍 受験後の振り返り・次への反省点
-                            </span>
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed bg-white p-2.5 border border-amber-200 rounded-md">
-                              {step.point}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              <div className="relative pt-2">
-                <div className="absolute -left-[37px] top-4 bg-yellow-500 text-white text-sm w-7 h-7 rounded-full flex items-center justify-center ring-4 ring-white shadow">
-                  🏆
-                </div>
-                <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 rounded-xl p-5 shadow-sm space-y-1">
-                  <span className="text-xs font-bold text-yellow-800 tracking-wider uppercase block">
-                    GOAL / 合格達成
-                  </span>
-                  <div className="text-lg sm:text-xl font-extrabold text-amber-900">
-                    {experience.passed_date ? `${experience.passed_date} ` : ''}
-                    {qualificationName || '資格'} 合格！
-                  </div>
-                  {experience.exam_attempts && (
-                    <p className="text-xs text-amber-700 font-medium">
-                      受験回数: {experience.exam_attempts}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">ロードマップの詳細ステップはありません。</p>
-          )}
+          <RoadmapTimeline
+            steps={experience.roadmap || []}
+            qualificationName={qualificationName}
+            passedDate={experience.passed_date}
+            examAttempts={experience.exam_attempts}
+          />
         </div>
 
         <div className="bg-white border rounded-xl p-6 text-center shadow-sm space-y-3">
