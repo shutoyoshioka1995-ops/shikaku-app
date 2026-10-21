@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import LikeButton from '@/components/LikeButton';
+import QualificationStatsCards from '@/components/QualificationStatsCards';
 import { incrementExperienceLike } from '@/lib/incrementLike';
 
 type Experience = {
@@ -20,8 +21,17 @@ type Experience = {
   daily_study_hours?: string;
   duration_days?: string;
   title?: string;
+  occupation?: string;
+  study_method?: string;
+  learning_style?: string;
   likes_count?: number;
   created_at?: string;
+  roadmap?: Array<{
+    period?: string;
+    material?: string;
+    textbook?: string;
+    point?: string;
+  }>;
 };
 
 type Qualification = {
@@ -200,6 +210,8 @@ export default function QualificationDetailPage() {
             </Link>
           </div>
         </div>
+
+        <QualificationStatsCards experiences={experiences} />
 
         {/* 🔍 条件絞り込みパネル */}
         <div className="bg-white border rounded-xl p-5 shadow-sm space-y-3">
