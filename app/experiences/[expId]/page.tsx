@@ -7,7 +7,9 @@ import { supabase } from '@/lib/supabase';
 import UserAvatar from '@/components/UserAvatar';
 import RoadmapTimeline from '@/components/RoadmapTimeline';
 import LikeButton from '@/components/LikeButton';
+import AuthorSnsLink from '@/components/AuthorSnsLink';
 import { incrementExperienceLike } from '@/lib/incrementLike';
+import { pickSnsUrl } from '@/lib/snsUrl';
 
 type RoadmapStep = {
   type?: 'study' | 'exam';
@@ -38,6 +40,9 @@ type ExperienceDetail = {
   roadmap?: RoadmapStep[];
   likes_count?: number;
   created_at?: string;
+  sns_url?: string;
+  twitter_url?: string;
+  blog_url?: string;
 };
 
 export default function ExperienceDetailPage() {
@@ -344,13 +349,14 @@ export default function ExperienceDetailPage() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-snug">
             {experience.title || '無題のロードマップ'}
           </h1>
-          <p className="flex items-center gap-2 text-xs text-gray-400">
+          <p className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
             <UserAvatar
               seed={experience.user_id || experience.user_name || experience.id}
               alt={experience.user_name || '匿名'}
               size={28}
             />
             <span>投稿者: {experience.user_name || '匿名'}</span>
+            <AuthorSnsLink url={pickSnsUrl(experience)} />
           </p>
         </div>
 

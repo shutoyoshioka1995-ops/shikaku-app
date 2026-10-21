@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { normalizeSnsUrl } from '@/lib/snsUrl';
 
 type RoadmapStep = {
   type?: 'study' | 'exam';
@@ -82,6 +83,7 @@ function NewExperienceForm() {
   const [dailyStudyHours, setDailyStudyHours] = useState('1〜2時間');
   const [durationDays, setDurationDays] = useState('2ヶ月（約60日）');
   const [title, setTitle] = useState('');
+  const [snsUrl, setSnsUrl] = useState('');
 
   const [roadmapSteps, setRoadmapSteps] = useState<RoadmapStep[]>([
     { type: 'study', period: '0〜14日目（初期）', material: '', textbook_url: '', point: '' },
@@ -196,28 +198,33 @@ function NewExperienceForm() {
     // ログインユーザー情報の取得
     const { data: { user } } = await supabase.auth.getUser();
 
-    const { error } = await supabase.from('experiences').insert([
-      {
-        qualification_id: selectedQual.id,
-        user_id: user?.id || null, // ログイン中ならuser_idを保存
-        user_name: userName || '匿名',
-        age_group: ageGroup,
-        industry: industry,
-        job_type: jobType,
-        occupation: `${industry} / ${jobType}`,
-        current_status: currentStatus,
-        exam_attempts: examAttempts,
-        passed_date: passedDate,
-        daily_study_hours: dailyStudyHours,
-        duration_days: durationDays,
-        title: title,
-        roadmap: roadmapSteps.map((step) => ({
-          ...step,
-          textbook: step.textbook || step.material || '',
-          textbook_url: normalizeTextbookUrl(step.textbook_url),
-        })),
-      },
-    ]);
+    const payload = {
+      qualification_id: selectedQual.id,
+      user_id: user?.id || null, // ログイン中ならuser_idを保存
+      user_name: userName || '匿名',
+      age_group: ageGroup,
+      industry: industry,
+      job_type: jobType,
+      occupation: `${industry} / ${jobType}`,
+      current_status: currentStatus,
+      exam_attempts: examAttempts,
+      passed_date: passedDate,
+      daily_study_hours: dailyStudyHours,
+      duration_days: durationDays,
+      title: title,
+      sns_url: normalizeSnsUrl(snsUrl) || null,
+      roadmap: roadmapSteps.map((step) => ({
+        ...step,
+        textbook: step.textbook || step.material || '',
+        textbook_url: normalizeTextbookUrl(step.textbook_url),
+      })),
+    };
+
+    let { error } = await supabase.from('experiences').insert([payload]);
+    if (error && /sns_url|column|schema cache/i.test(error.message)) {
+      const { sns_url: _unused, ...payloadWithoutSns } = payload;
+      ({ error } = await supabase.from('experiences').insert([payloadWithoutSns]));
+    }
 
     setLoading(false);
 
@@ -316,6 +323,20 @@ function NewExperienceForm() {
                 placeholder="例: Aさん"
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
+                className="w-full border p-2 rounded-md text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                X（旧Twitter）アカウントまたはブログURL（任意）
+              </label>
+              <input
+                type="text"
+                inputMode="url"
+                placeholder="例: @username / https://x.com/username / https://example.com"
+                value={snsUrl}
+                onChange={(e) => setSnsUrl(e.target.value)}
                 className="w-full border p-2 rounded-md text-sm"
               />
             </div>

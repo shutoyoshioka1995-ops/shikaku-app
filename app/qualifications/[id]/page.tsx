@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import LikeButton from '@/components/LikeButton';
 import QualificationStatsCards from '@/components/QualificationStatsCards';
+import ExamOverviewPanel from '@/components/ExamOverviewPanel';
 import { incrementExperienceLike } from '@/lib/incrementLike';
 
 type Experience = {
@@ -38,6 +39,7 @@ type Qualification = {
   id: string;
   name: string;
   description?: string;
+  [key: string]: unknown;
 };
 
 export default function QualificationDetailPage() {
@@ -210,6 +212,8 @@ export default function QualificationDetailPage() {
             </Link>
           </div>
         </div>
+
+        <ExamOverviewPanel qualification={qualification} />
 
         <QualificationStatsCards experiences={experiences} />
 
