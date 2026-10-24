@@ -16,6 +16,6 @@ export function pickSnsUrl(record: {
 }
 
 export function snsLinkLabel(url: string) {
-  if (/x\.com|twitter\.com/i.test(url)) return '🔗 X (Twitter)';
-  return '🔗 ブログ';
+  if (/x\.com|twitter\.com/i.test(url)) return 'X（旧Twitter）';
+  return 'ブログ';
 }

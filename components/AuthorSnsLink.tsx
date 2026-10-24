@@ -8,7 +8,7 @@ export default function AuthorSnsLink({ url }: { url?: string | null }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-bold text-sky-800 transition hover:bg-sky-100"
+      className="inline-flex items-center rounded-full border border-navy/20 bg-navy-soft px-2.5 py-1 text-[11px] font-bold text-navy transition hover:bg-white"
     >
       {snsLinkLabel(url)}
     </a>

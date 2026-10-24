@@ -31,17 +31,16 @@ export default function TextbookLinkCard({
 
   return (
     <div>
-      <span className="mb-1 block text-xs font-bold text-gray-500">📚 使用した教材・動画</span>
-      <div className="space-y-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+      <span className="mb-1 block text-xs font-bold text-gray-500">使用した教材・動画</span>
+      <div className="space-y-3 rounded-xl border border-navy/15 bg-white p-3">
         {youtubeId ? (
           <div className="space-y-2">
             <p className="break-all text-xs text-gray-500">
-              🔗{' '}
               <a
                 href={rawName}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
+                className="text-navy hover:underline"
               >
                 {rawName}
               </a>
@@ -60,12 +59,11 @@ export default function TextbookLinkCard({
           <p className="whitespace-pre-wrap text-sm font-medium text-gray-800">{bookTitle}</p>
         ) : isHttpUrl(rawName) ? (
           <p className="break-all text-sm font-medium text-gray-800">
-            🔗{' '}
             <a
               href={rawName}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:underline"
+              className="text-navy hover:underline"
             >
               {rawName}
             </a>
@@ -77,18 +75,18 @@ export default function TextbookLinkCard({
             href={affiliateUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={`${buttonClass} bg-emerald-600 text-white hover:bg-emerald-700`}
+            className={`${buttonClass} bg-navy text-white hover:bg-navy-hover`}
           >
-            🛒 教材の購入・詳細ページへ
+            教材の購入・詳細ページへ
           </a>
         ) : bookTitle ? (
           <a
             href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(bookTitle)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className={`${buttonClass} bg-amber-500 text-white hover:bg-amber-600`}
+            className={`${buttonClass} border border-navy bg-white text-navy hover:bg-navy-soft`}
           >
-            🔍 Amazonで「{bookTitle}」を検索する
+            Amazonで「{bookTitle}」を検索する
           </a>
         ) : null}
       </div>

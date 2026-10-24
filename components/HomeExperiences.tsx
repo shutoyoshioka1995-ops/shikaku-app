@@ -1,10 +1,22 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import UserAvatar from '@/components/UserAvatar';
 import LikeButton from '@/components/LikeButton';
-import { incrementExperienceLike } from '@/lib/incrementLike';
+import { addUniqueLike, loadLikedExperienceIds } from '@/lib/likes';
+import { loginUrl } from '@/lib/loginNext';
+import { ALL_FILTERS, matchesFilters, type FilterId } from '@/lib/experienceFilters';
+import {
+  matchesDurationFilter,
+  matchesSearchQuery,
+  type AppliedHomeSearch,
+  type HomeDurationFilter,
+  type HomePersonaFilter,
+} from '@/lib/homeSearch';
+
+const PAGE_SIZE = 6;
 
 export type HomeExperience = {
   id: string;
@@ -31,79 +43,6 @@ export type HomeExperience = {
   }>;
 };
 
-const PERSONA_FILTERS = [
-  { id: 'working', label: '社会人' },
-  { id: 'student', label: '学生' },
-  { id: 'homemaker', label: '主婦・主夫' },
-] as const;
-
-const METHOD_FILTERS = [
-  { id: 'self', label: '独学' },
-  { id: 'online', label: '通信講座' },
-  { id: 'school', label: '通学スクール' },
-] as const;
-
-const ALL_FILTERS = [...PERSONA_FILTERS, ...METHOD_FILTERS];
-
-type FilterId = (typeof ALL_FILTERS)[number]['id'];
-
-function experienceText(exp: HomeExperience) {
-  const roadmapText = Array.isArray(exp.roadmap)
-    ? exp.roadmap
-        .map((step) => [step.period, step.material, step.textbook, step.point].filter(Boolean).join(' '))
-        .join(' ')
-    : '';
-
-  return [
-    exp.industry,
-    exp.job_type,
-    exp.occupation,
-    exp.current_status,
-    exp.title,
-    exp.study_method,
-    exp.learning_style,
-    roadmapText,
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
-
-function personaLabel(exp: HomeExperience) {
-  const source = `${exp.industry || ''} ${exp.job_type || ''} ${exp.occupation || ''}`;
-  if (/主婦|主夫/.test(source)) return 'homemaker';
-  if (/学生/.test(source)) return 'student';
-  return 'working';
-}
-
-function matchesMethod(exp: HomeExperience, id: FilterId) {
-  const text = experienceText(exp);
-  if (id === 'self') return /独学/.test(text);
-  if (id === 'online') return /通信講座|通信教育|通信|オンライン講座/.test(text);
-  if (id === 'school') return /通学|スクール|予備校/.test(text);
-  return false;
-}
-
-function matchesFilters(exp: HomeExperience, selected: FilterId[]) {
-  if (selected.length === 0) return true;
-
-  const selectedPersonas = selected.filter((id) =>
-    PERSONA_FILTERS.some((filter) => filter.id === id)
-  );
-  const selectedMethods = selected.filter((id) =>
-    METHOD_FILTERS.some((filter) => filter.id === id)
-  );
-
-  if (selectedPersonas.length > 0 && !selectedPersonas.includes(personaLabel(exp))) {
-    return false;
-  }
-
-  if (selectedMethods.length > 0 && !selectedMethods.some((id) => matchesMethod(exp, id))) {
-    return false;
-  }
-
-  return true;
-}
-
 function ExperienceCard({
   exp,
   variant,
@@ -125,10 +64,10 @@ function ExperienceCard({
     return (
       <Link
         href={`/experiences/${exp.id}`}
-        className="block space-y-2.5 rounded-xl border border-amber-200 bg-white p-4 transition hover:shadow-md"
+        className="block space-y-2.5 rounded-xl border border-gray-200 bg-white p-4 transition hover:border-navy"
       >
         <div className="flex items-start justify-between gap-2">
-          <span className="truncate rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-blue-800">
+          <span className="truncate rounded-full bg-navy-soft px-2.5 py-0.5 text-[11px] font-bold text-navy">
             {exp.qualification_name}
           </span>
           <LikeButton count={likeCount} liked={liked} loading={liking} onLike={onLike} />
@@ -147,7 +86,7 @@ function ExperienceCard({
             <span className="truncate">{displayName}</span>
           </p>
           <p>
-            ⏱️ {exp.daily_study_hours || '未設定'} / ⏳ {exp.duration_days || '未設定'}
+            {exp.daily_study_hours || '未設定'} / {exp.duration_days || '未設定'}
           </p>
         </div>
       </Link>
@@ -157,10 +96,10 @@ function ExperienceCard({
   return (
     <Link
       href={`/experiences/${exp.id}`}
-      className="block space-y-2 rounded-xl border border-gray-200 bg-white p-4 transition hover:border-blue-400"
+        className="block space-y-2 rounded-xl border border-gray-200 bg-white p-4 transition hover:border-navy"
     >
       <div className="flex items-center justify-between">
-        <span className="rounded bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+        <span className="rounded bg-navy-soft px-2.5 py-0.5 text-xs font-bold text-navy">
           {exp.qualification_name}
         </span>
         <LikeButton count={likeCount} liked={liked} loading={liking} onLike={onLike} />
@@ -179,12 +118,28 @@ function ExperienceCard({
   );
 }
 
-export default function HomeExperiences({ experiences }: { experiences: HomeExperience[] }) {
+export default function HomeExperiences({
+  experiences,
+  appliedSearch = { query: '', duration: '' as HomeDurationFilter, persona: '' as HomePersonaFilter },
+  searchActive = false,
+}: {
+  experiences: HomeExperience[];
+  appliedSearch?: AppliedHomeSearch;
+  searchActive?: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [selected, setSelected] = useState<FilterId[]>([]);
   const [sort, setSort] = useState<'popular' | 'latest'>('popular');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [likingId, setLikingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ids = experiences.map((exp) => exp.id);
+    loadLikedExperienceIds(ids).then(setLikedIds);
+  }, [experiences]);
 
   const toggleFilter = (id: FilterId) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
@@ -197,48 +152,59 @@ export default function HomeExperiences({ experiences }: { experiences: HomeExpe
 
     const previous = likeCountOf(exp);
     setLikingId(exp.id);
-    setLikeCounts((prev) => ({ ...prev, [exp.id]: previous + 1 }));
-    setLikedIds((prev) => new Set(prev).add(exp.id));
 
     try {
-      const next = await incrementExperienceLike(exp.id, previous);
-      setLikeCounts((prev) => ({ ...prev, [exp.id]: next }));
+      const result = await addUniqueLike(exp.id, previous);
+      if (result.needsLogin) {
+        router.push(loginUrl(pathname || '/'));
+        return;
+      }
+      setLikedIds((prev) => new Set(prev).add(exp.id));
+      if (!result.already) {
+        setLikeCounts((prev) => ({ ...prev, [exp.id]: result.next }));
+      }
     } catch (err) {
-      setLikeCounts((prev) => ({ ...prev, [exp.id]: previous }));
-      setLikedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(exp.id);
-        return next;
-      });
+      // keep previous count
     } finally {
       setLikingId(null);
     }
   };
 
-  const filtered = useMemo(
-    () => experiences.filter((exp) => matchesFilters(exp, selected)),
-    [experiences, selected]
-  );
+  const filtered = useMemo(() => {
+    const heroPersona = appliedSearch.persona
+      ? ([appliedSearch.persona] as FilterId[])
+      : [];
 
-  const featuredExperiences = [...filtered]
-    .sort((a, b) => {
-      if (sort === 'popular') return likeCountOf(b) - likeCountOf(a);
-      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-    })
-    .slice(0, 3);
+    return experiences.filter((exp) => {
+      if (!matchesSearchQuery(exp, appliedSearch.query)) return false;
+      if (!matchesDurationFilter(exp.duration_days, appliedSearch.duration)) return false;
+      if (heroPersona.length > 0 && !matchesFilters(exp, heroPersona)) return false;
+      if (!matchesFilters(exp, selected)) return false;
+      return true;
+    });
+  }, [experiences, selected, appliedSearch]);
 
-  const recentExperiences = filtered.slice(0, 5);
+  const sortedExperiences = [...filtered].sort((a, b) => {
+    if (sort === 'popular') return likeCountOf(b) - likeCountOf(a);
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+
+  const featuredExperiences = sortedExperiences.slice(0, visibleCount);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [selected, sort, appliedSearch, searchActive]);
 
   return (
     <>
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-gray-800 sm:text-xl">🔍 条件で絞り込む</h2>
+          <h2 className="text-lg font-bold text-navy sm:text-xl">条件で絞り込む</h2>
           {selected.length > 0 && (
             <button
               type="button"
               onClick={() => setSelected([])}
-              className="text-xs font-medium text-blue-600 hover:underline"
+              className="text-xs font-medium text-navy hover:underline"
             >
               リセット
             </button>
@@ -254,8 +220,8 @@ export default function HomeExperiences({ experiences }: { experiences: HomeExpe
                 onClick={() => toggleFilter(filter.id)}
                 className={`rounded-full border px-3 py-1.5 text-xs font-bold transition sm:text-sm ${
                   isActive
-                    ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
+                    ? 'border-navy bg-navy text-white'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-navy hover:bg-navy-soft'
                 }`}
               >
                 {filter.label}
@@ -263,80 +229,78 @@ export default function HomeExperiences({ experiences }: { experiences: HomeExpe
             );
           })}
         </div>
-        {selected.length > 0 && (
+        {(selected.length > 0 || searchActive) && (
           <p className="text-xs text-gray-500">{filtered.length}件の体験談が見つかりました</p>
         )}
       </section>
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-gray-800 sm:text-xl">🔥 人気の合格ロードマップ</h2>
+          <h2 className="text-lg font-bold text-navy sm:text-xl">
+            {searchActive
+              ? '検索結果のロードマップ'
+              : sort === 'latest'
+                ? '最新の合格ロードマップ'
+                : '人気の合格ロードマップ'}
+          </h2>
           <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
             <button
               type="button"
               onClick={() => setSort('popular')}
               className={`rounded-md px-3 py-1.5 text-xs font-bold transition sm:text-sm ${
                 sort === 'popular'
-                  ? 'bg-orange-500 text-white shadow-sm'
+                  ? 'bg-navy text-white'
                   : 'text-gray-600 hover:bg-gray-50'
               }`}
             >
-              🔥 人気順
+              人気順
             </button>
             <button
               type="button"
               onClick={() => setSort('latest')}
               className={`rounded-md px-3 py-1.5 text-xs font-bold transition sm:text-sm ${
                 sort === 'latest'
-                  ? 'bg-blue-600 text-white shadow-sm'
+                  ? 'bg-navy text-white'
                   : 'text-gray-600 hover:bg-gray-50'
               }`}
             >
-              🆕 最新順
+              最新順
             </button>
           </div>
         </div>
         {featuredExperiences.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {featuredExperiences.map((exp) => (
-              <ExperienceCard
-                key={exp.id}
-                exp={exp}
-                variant="popular"
-                likeCount={likeCountOf(exp)}
-                liked={likedIds.has(exp.id)}
-                liking={likingId === exp.id}
-                onLike={() => handleLike(exp)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {featuredExperiences.map((exp) => (
+                <ExperienceCard
+                  key={exp.id}
+                  exp={exp}
+                  variant="popular"
+                  likeCount={likeCountOf(exp)}
+                  liked={likedIds.has(exp.id)}
+                  liking={likingId === exp.id}
+                  onLike={() => handleLike(exp)}
+                />
+              ))}
+            </div>
+            {visibleCount < sortedExperiences.length && (
+              <button
+                type="button"
+                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                className="min-h-11 w-full rounded-xl border border-navy/20 bg-white text-sm font-bold text-navy hover:bg-navy-soft"
+              >
+                もっと見る（残り{sortedExperiences.length - visibleCount}件）
+              </button>
+            )}
+          </>
         ) : (
           <p className="py-4 text-center text-sm text-gray-500">
-            {selected.length > 0
-              ? 'この条件に合う投稿はまだありません。'
+            {selected.length > 0 || searchActive
+              ? 'この条件に合う投稿はまだありません。条件を変えるか、資格一覧から探してみてください。'
               : '投稿がまだありません。'}
           </p>
         )}
       </section>
-
-      {recentExperiences.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-lg font-bold text-gray-800 sm:text-xl">🆕 最新の投稿ロードマップ</h2>
-          <div className="space-y-3">
-            {recentExperiences.map((exp) => (
-              <ExperienceCard
-                key={exp.id}
-                exp={exp}
-                variant="recent"
-                likeCount={likeCountOf(exp)}
-                liked={likedIds.has(exp.id)}
-                liking={likingId === exp.id}
-                onLike={() => handleLike(exp)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
     </>
   );
 }

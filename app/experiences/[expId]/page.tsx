@@ -8,8 +8,11 @@ import UserAvatar from '@/components/UserAvatar';
 import RoadmapTimeline from '@/components/RoadmapTimeline';
 import LikeButton from '@/components/LikeButton';
 import AuthorSnsLink from '@/components/AuthorSnsLink';
-import { incrementExperienceLike } from '@/lib/incrementLike';
+import SharePostedModal from '@/components/SharePostedModal';
+import { addUniqueLike, loadLikedExperienceIds } from '@/lib/likes';
+import { loginUrl } from '@/lib/loginNext';
 import { pickSnsUrl } from '@/lib/snsUrl';
+import { canonicalNameForId } from '@/lib/qualificationMerge';
 
 type RoadmapStep = {
   type?: 'study' | 'exam';
@@ -64,6 +67,8 @@ export default function ExperienceDetailPage() {
   const [favLoading, setFavLoading] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [isCopying, setIsCopying] = useState<boolean>(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharePageUrl, setSharePageUrl] = useState('');
 
   useEffect(() => {
     async function fetchExperienceDetail() {
@@ -108,15 +113,16 @@ export default function ExperienceDetailPage() {
 
         setExperience(expData);
         setLikes(expData.likes_count || 0);
+        if (user) {
+          const liked = await loadLikedExperienceIds([expId]);
+          setHasLiked(liked.has(expId));
+        }
 
         if (expData.qualification_id) {
-          const { data: qualData } = await supabase
-            .from('qualifications')
-            .select('name')
-            .eq('id', expData.qualification_id)
-            .maybeSingle();
-
-          if (qualData) setQualificationName(qualData.name);
+          const { data: allQuals } = await supabase.from('qualifications').select('id, name');
+          if (allQuals) {
+            setQualificationName(canonicalNameForId(allQuals, expData.qualification_id, '資格'));
+          }
         }
       } catch (err: any) {
         setErrorMessage('予期せぬエラーが発生しました。');
@@ -128,11 +134,27 @@ export default function ExperienceDetailPage() {
     fetchExperienceDetail();
   }, [expId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setSharePageUrl(window.location.origin + `/experiences/${expId}`);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('posted') === '1') {
+      setShowShareModal(true);
+    }
+  }, [expId]);
+
+  const closeShareModal = () => {
+    setShowShareModal(false);
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('posted');
+    window.history.replaceState({}, '', url.pathname + url.search);
+  };
+
   // 📋 マイプランへコピーして保存
   const handleCopyToMyPlan = async () => {
     if (!currentUserId) {
-      alert('マイプランを作成するにはログインが必要です。');
-      router.push('/login');
+      router.push(loginUrl(`/experiences/${expId}`));
       return;
     }
 
@@ -172,8 +194,7 @@ export default function ExperienceDetailPage() {
 
   const toggleFavorite = async () => {
     if (!currentUserId) {
-      alert('お気に入り機能を使用するにはログインが必要です。');
-      router.push('/login');
+      router.push(loginUrl(`/experiences/${expId}`));
       return;
     }
 
@@ -204,15 +225,18 @@ export default function ExperienceDetailPage() {
 
     setIsLiking(true);
     const previousLikes = likes;
-    setLikes(previousLikes + 1);
-    setHasLiked(true);
 
     try {
-      const next = await incrementExperienceLike(experience.id, previousLikes);
-      setLikes(next);
+      const result = await addUniqueLike(experience.id, previousLikes);
+      if (result.needsLogin) {
+        router.push(loginUrl(`/experiences/${expId}`));
+        return;
+      }
+      setHasLiked(true);
+      if (!result.already) setLikes(result.next);
     } catch (err) {
-      setLikes(previousLikes);
       setHasLiked(false);
+      setLikes(previousLikes);
     } finally {
       setIsLiking(false);
     }
@@ -261,7 +285,7 @@ export default function ExperienceDetailPage() {
         <h2 className="text-xl font-bold text-gray-800">
           {errorMessage || '体験談が見つかりませんでした。'}
         </h2>
-        <Link href="/" className="text-blue-600 hover:underline text-sm font-medium">
+        <Link href="/" className="text-navy hover:underline text-sm font-medium">
           ← トップページに戻る
         </Link>
       </div>
@@ -272,18 +296,26 @@ export default function ExperienceDetailPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6">
+      <SharePostedModal
+        open={showShareModal}
+        qualificationName={qualificationName}
+        durationDays={experience.duration_days}
+        dailyStudyHours={experience.daily_study_hours}
+        pageUrl={sharePageUrl}
+        onClose={closeShareModal}
+      />
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex flex-wrap justify-between items-center gap-2 text-sm">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
             <Link href="/" className="text-gray-600 hover:text-gray-900 hover:underline">
-              🏠 トップページへ
+              トップページへ
             </Link>
             {experience.qualification_id && (
               <>
                 <span className="text-gray-300">|</span>
                 <Link
                   href={`/qualifications/${experience.qualification_id}`}
-                  className="text-blue-600 hover:underline font-medium"
+                  className="font-medium text-navy hover:underline"
                 >
                   ← {qualificationName || '資格詳細'}に戻る
                 </Link>
@@ -291,28 +323,24 @@ export default function ExperienceDetailPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* 📋 マイプランにコピーボタン */}
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <button
               onClick={handleCopyToMyPlan}
               disabled={isCopying}
-              className="text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1"
+              className="flex min-h-11 w-full items-center justify-center gap-1 rounded-lg bg-navy px-3 text-xs font-bold text-white transition hover:bg-navy-hover sm:w-auto"
             >
-              <span>📋</span>
               <span>{isCopying ? 'コピー中...' : '自分用にこのプランを保存'}</span>
             </button>
 
-            {/* ⭐ お気に入りボタン */}
             <button
               onClick={toggleFavorite}
               disabled={favLoading}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition border flex items-center gap-1 ${
+              className={`flex min-h-11 w-full items-center justify-center gap-1 rounded-lg border px-3 text-xs font-bold transition sm:w-auto ${
                 isFavorite
-                  ? 'bg-yellow-50 text-yellow-700 border-yellow-300'
-                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  ? 'border-navy bg-navy-soft text-navy'
+                  : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
               }`}
             >
-              <span>{isFavorite ? '★' : '☆'}</span>
               <span>{isFavorite ? 'お気に入り済み' : 'お気に入り'}</span>
             </button>
 
@@ -320,9 +348,9 @@ export default function ExperienceDetailPage() {
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="text-xs text-red-500 hover:text-red-700 font-bold border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg transition"
+                className="flex min-h-11 w-full items-center justify-center rounded-lg border border-red-200 px-3 text-xs font-bold text-red-500 hover:bg-red-50 sm:w-auto"
               >
-                {isDeleting ? '削除中...' : '🗑️ 削除'}
+                {isDeleting ? '削除中...' : '削除'}
               </button>
             )}
           </div>
@@ -332,7 +360,7 @@ export default function ExperienceDetailPage() {
         <div className="bg-white border rounded-xl p-6 shadow-sm space-y-4">
           <div className="flex justify-between items-start gap-4">
             {qualificationName && (
-              <span className="inline-block bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full">
+              <span className="inline-block bg-navy-soft text-navy text-xs font-bold px-3 py-1 rounded-full">
                 {qualificationName}
               </span>
             )}
@@ -363,7 +391,7 @@ export default function ExperienceDetailPage() {
         {/* 2. プロフィール & 受験条件 */}
         <div className="bg-white border rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="font-bold text-base text-gray-800 border-b pb-2 flex items-center gap-2">
-            👤 合格者のプロフィール & 受験データ
+            合格者のプロフィール・受験データ
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
@@ -384,7 +412,7 @@ export default function ExperienceDetailPage() {
             </div>
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
               <span className="block text-xs text-gray-500 mb-0.5">最終合格日 / 時期</span>
-              <span className="font-semibold text-green-700">{experience.passed_date || '未設定'}</span>
+              <span className="font-semibold text-navy">{experience.passed_date || '未設定'}</span>
             </div>
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
               <span className="block text-xs text-gray-500 mb-0.5">スタート時の状況</span>
@@ -396,7 +424,7 @@ export default function ExperienceDetailPage() {
             </div>
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 col-span-2 sm:col-span-1">
               <span className="block text-xs text-gray-500 mb-0.5">合格までの総期間</span>
-              <span className="font-semibold text-blue-600">{experience.duration_days || '未設定'}</span>
+              <span className="font-semibold text-navy">{experience.duration_days || '未設定'}</span>
             </div>
           </div>
         </div>
@@ -404,7 +432,7 @@ export default function ExperienceDetailPage() {
         {/* 3. 学習ロードマップ */}
         <div className="bg-white border rounded-xl p-6 shadow-sm space-y-6">
           <h2 className="font-bold text-lg text-gray-800 border-b pb-2 flex items-center gap-2">
-            🗺️ 合格までの学習ロードマップ & 受験履歴
+            合格までの学習ロードマップ・受験履歴
           </h2>
 
           <RoadmapTimeline

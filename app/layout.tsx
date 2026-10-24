@@ -1,5 +1,7 @@
 import './globals.css';
 import Header from './components/Header';
+import FeedbackWidget from '@/components/FeedbackWidget';
+import SiteFooter from '@/components/SiteFooter';
 
 export const metadata = {
   title: '資格合格ロードマップ検索',
@@ -12,10 +14,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ja">
-      <body className="bg-gray-50 text-gray-900 antialiased min-h-screen">
+    <html lang="ja" suppressHydrationWarning>
+      <body className="bg-background text-foreground antialiased min-h-screen flex flex-col">
         <Header />
-        {children}
+        <div className="flex-1 pb-28 sm:pb-8">{children}</div>
+        <SiteFooter />
+        <FeedbackWidget />
       </body>
     </html>
   );
