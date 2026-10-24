@@ -11,11 +11,11 @@ export default async function HomePage() {
     .select('*')
     .order('name', { ascending: true });
 
-  const rawQualifications = qualData || [];
+  const rawQualifications = (qualData || []) as { id: string; name: string }[];
   const qualifications = mergeQualifications(rawQualifications);
   const qualMap = new Map<string, string>();
   qualifications.forEach((group) => {
-    group.aliasIds.forEach((id) => qualMap.set(id, group.name));
+    group.aliasIds.forEach((id: string) => qualMap.set(id, group.name));
   });
 
   // 体験談
